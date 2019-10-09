@@ -1,5 +1,5 @@
 {
-  "name": "inquirer-autocomplete-prompt",
+  "name": "@rizzlesauce/inquirer-autocomplete-prompt",
   "description": "Autocomplete prompt for inquirer",
   "version": "1.0.1",
   "files": [
@@ -7,7 +7,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:mokkabonna/inquirer-autocomplete-prompt.git"
+    "url": "git@github.com:rizzlesauce/inquirer-autocomplete-prompt.git"
   },
   "publishConfig": {
     "registry": "http://registry.npmjs.org"
