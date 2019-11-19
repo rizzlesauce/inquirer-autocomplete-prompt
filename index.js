@@ -236,6 +236,9 @@ class AutocompletePrompt extends Base {
         var autoCompleted = this.currentChoices.getChoice(this.selected).value;
         this.rl.write(autoCompleted);
         this.render();
+        if (this.opt.searchOnAutocomplete) {
+          this.search(autoCompleted);
+        }
       }
     } else if (keyName === 'down') {
       len = this.currentChoices.length;
