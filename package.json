@@ -1,7 +1,7 @@
 {
   "name": "@rizzlesauce/inquirer-autocomplete-prompt",
   "description": "Autocomplete prompt for inquirer",
-  "version": "1.0.2-rossa.2",
+  "version": "1.0.2-rossa.3",
   "files": [
     "index.js"
   ],
