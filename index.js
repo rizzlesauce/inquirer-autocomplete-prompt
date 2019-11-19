@@ -76,10 +76,11 @@ class AutocompletePrompt extends Base {
     var bottomContent = '';
 
     if (this.firstRender) {
-      var suggestText = this.opt.suggestOnly ? ', tab to autocomplete' : '';
-      content += chalk.dim(
-        '(Use arrow keys or type to search' + suggestText + ')'
-      );
+      const suggestText = 'suggestText' in this.opt ? this.opt.suggestText :
+        `(Use arrow keys or type to search${this.opt.suggestOnly ? ', tab to autocomplete' : ''})`;
+      if (suggestText) {
+        content += chalk.dim(suggestText);
+      }
     }
     // Render choices or answer depending on the state
     if (this.status === 'answered') {
@@ -106,7 +107,10 @@ class AutocompletePrompt extends Base {
       );
     } else {
       content += this.rl.line;
-      bottomContent += '  ' + chalk.yellow('No results...');
+      const noResultsText = 'noResultsText' in this.opt ? this.opt.noResultsText : 'No results...';
+      if (noResultsText) {
+        bottomContent += '  ' + chalk.yellow(noResultsText);
+      }
     }
 
     if (error) {
