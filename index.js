@@ -35,6 +35,7 @@ class AutocompletePrompt extends Base {
     this.opt.default = null;
 
     this.paginator = new Paginator();
+    this.transformChoice = this.opt.transformChoice || (option => option);
   }
 
   /**
@@ -126,6 +127,9 @@ class AutocompletePrompt extends Base {
    * When user press `enter` key
    */
   onSubmit(line /* : string */) {
+    if (!this.opt.suggestOnly) {
+      line = this.transformChoice(line);
+    }
     if (typeof this.opt.validate === 'function' && this.opt.suggestOnly) {
       var validationResult = this.opt.validate(line);
 
@@ -237,7 +241,8 @@ class AutocompletePrompt extends Base {
     if (keyName === 'tab' && this.opt.suggestOnly) {
       if (this.currentChoices.getChoice(this.selected)) {
         this.rl.clearLine();
-        var autoCompleted = this.currentChoices.getChoice(this.selected).value;
+        var autoCompleted = this.transformChoice(
+            this.currentChoices.getChoice(this.selected).value);
         this.rl.write(autoCompleted);
         this.render();
         if (this.opt.searchOnAutocomplete) {
