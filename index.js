@@ -90,7 +90,7 @@ class AutocompletePrompt extends Base {
       content += this.rl.line;
       bottomContent += '  ' + chalk.dim('Searching...');
     } else if (this.currentChoices.length) {
-      var choicesStr = listRender(this.currentChoices, this.selected);
+      var choicesStr = listRender(this.currentChoices, this.selected, this.opt.styleSelected);
       content += this.rl.line;
       var indexPosition = this.selected;
       var realIndexPosition = 0;
@@ -275,7 +275,7 @@ class AutocompletePrompt extends Base {
  * @param  {Number} pointer Position of the pointer
  * @return {String}         Rendered content
  */
-function listRender(choices, pointer /*: string */) /*: string */ {
+function listRender(choices, pointer /*: string */, styleSelected /*: (text: string) => string */) /*: string */ {
   var output = '';
   var separatorOffset = 0;
 
@@ -290,7 +290,11 @@ function listRender(choices, pointer /*: string */) /*: string */ {
     var line = (isSelected ? figures.pointer + ' ' : '  ') + choice.name;
 
     if (isSelected) {
-      line = chalk.cyan(line);
+      if (styleSelected) {
+        line = styleSelected(line);
+      } else {
+        line = chalk.cyan(line);
+      }
     }
     output += line + ' \n';
   });
