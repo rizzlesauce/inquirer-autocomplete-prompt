@@ -67,6 +67,27 @@ class AutocompletePrompt extends Base {
     if (this.opt.showAutoTrail) {
       this.cursorPos = 0;
       cliCursor.hide();
+
+      const handleCtrlC = () => {
+        // stop the event listeners
+        this.answer = {};
+        // clean up the renderer
+        this.noCursor = true;
+        this.noAutoTrail = true;
+        this.currentChoices = [];
+        this.render();
+        this.rl.off('SIGINT', handleCtrlC);
+        cliCursor.show();
+      }
+      // reprioritize the existing SIGINT listeners
+      const listeners = this.rl.listeners('SIGINT');
+      listeners.forEach(listener => this.rl.off('SIGINT', listener));
+
+      // register our SIGINT listener first
+      this.rl.on('SIGINT', handleCtrlC);
+
+      // reregister the existing SIGINT listeners
+      listeners.forEach(listener => this.rl.on('SIGINT', listener));
     }
 
     // Call once at init
@@ -86,10 +107,10 @@ class AutocompletePrompt extends Base {
 
     const renderLine = (selectedChoice /*: ?string */) => {
       if (this.opt.showAutoTrail) {
-        const cursorPos = this.cursorPos;
         const line = this.rl.line;
+        const cursorPos = this.noCursor ? -1 : this.cursorPos;
         let autoTrail = '';
-        if (this.opt.showAutoTrail && selectedChoice) {
+        if (!this.noAutoTrail && selectedChoice) {
           const transformedChoice = this.transformChoice(selectedChoice);
           for (let i = 0; i < line.length; ++i) {
             const prefix = line.substr(i);
@@ -99,7 +120,8 @@ class AutocompletePrompt extends Base {
             }
           }
         }
-        for (let i = 0; i <= (line.length + autoTrail.length + 1); ++i) {
+        const length = Math.max(line.length + autoTrail.length, cursorPos + 1);
+        for (let i = 0; i < length; ++i) {
           let char = ' ';
           if (i < line.length) {
             char = line.charAt(i);
@@ -179,11 +201,17 @@ class AutocompletePrompt extends Base {
     if (!this.opt.suggestOnly) {
       line = this.transformChoice(line);
     }
+
     if (typeof this.opt.validate === 'function' && this.opt.suggestOnly) {
       var validationResult = this.opt.validate(line);
 
       const checkValidationResult = validationResult => {
         if (validationResult !== true) {
+          // restore the previous search term
+          if (this.lastSearchTerm) {
+            this.rl.write(this.lastSearchTerm);
+          }
+
           this.render(
             validationResult || 'Enter something, tab to autocomplete!'
           );
@@ -290,6 +318,25 @@ class AutocompletePrompt extends Base {
     var len;
     var keyName = (e.key && e.key.name) || undefined;
 
+    if (this.opt.showAutoTrail) {
+      this.noAutoTrail = false;
+    }
+
+    const handleReadLineCycling = () => {
+      // If answers have been submitted and didn't validate, pressing up and down
+      // will trigger rl to cycle through them. We detect this cycling here and
+      // counteract it if needed.
+      if (this.rl.line !== this.lastSearchTerm) {
+        if (this.currentChoices.length) {
+          this.rl.clearLine();
+          this.rl.write(this.lastSearchTerm);
+        } else if (this.opt.showAutoTrail) {
+          this.lastSearchTerm = this.rl.line;
+          this.cursorPos = this.rl.line.length;
+        }
+      }
+    };
+
     if (keyName === 'tab' && this.opt.suggestOnly) {
       if (this.currentChoices.getChoice(this.selected)) {
         this.rl.clearLine();
@@ -303,14 +350,20 @@ class AutocompletePrompt extends Base {
         if (this.opt.searchOnAutocomplete) {
           this.search(autoCompleted);
         }
+      } else if (this.opt.showAutoTrail) {
+        this.rl.clearLine();
+        this.rl.write(this.lastSearchTerm || '');
+        this.cursorPos = this.lastSearchTerm ? this.lastSearchTerm.length : 0;
       }
     } else if (keyName === 'down') {
+      handleReadLineCycling();
       len = this.currentChoices.length;
       this.selected = this.selected < len - 1 ? this.selected + 1 : 0;
       this.ensureSelectedInRange();
       this.render();
       utils.up(this.rl, 2);
     } else if (keyName === 'up') {
+      handleReadLineCycling();
       len = this.currentChoices.length;
       this.selected = this.selected > 0 ? this.selected - 1 : len - 1;
       this.ensureSelectedInRange();
@@ -318,7 +371,14 @@ class AutocompletePrompt extends Base {
     } else {
       const changed = this.lastSearchTerm !== this.rl.line;
       if (this.opt.showAutoTrail) {
-        if (keyName === 'left' || keyName === 'backspace') {
+        if (keyName === 'left') {
+          if (this.cursorPos > 0) {
+            --this.cursorPos;
+          }
+        } else if (keyName === 'backspace') {
+          if (!this.lastSearchTerm || this.cursorPos === this.lastSearchTerm.length) {
+            this.noAutoTrail = true;
+          }
           if (this.cursorPos > 0) {
             --this.cursorPos;
           }
@@ -327,8 +387,9 @@ class AutocompletePrompt extends Base {
             ++this.cursorPos;
           }
         } else if (keyName === 'delete') {
-          // do nothing
-        } else {
+          // cursor position does not change
+        } else if ((!this.lastSearchTerm && this.cursorPos < this.rl.line.length) ||
+            (this.rl.line.length > this.lastSearchTerm.length)) {
           ++this.cursorPos;
         }
       }
