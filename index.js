@@ -5,6 +5,7 @@
  */
 
 var chalk = require('chalk');
+var cliCursor = require('cli-cursor');
 var figures = require('figures');
 var Base = require('inquirer/lib/prompts/base');
 var Choices = require('inquirer/lib/objects/choices');
@@ -34,6 +35,8 @@ class AutocompletePrompt extends Base {
     // Make sure no default is set (so it won't be printed)
     this.opt.default = null;
 
+    this.opt.showAutoTrail = this.opt.suggestOnly && this.opt.showAutoTrail;
+
     this.paginator = new Paginator();
     this.transformChoice = this.opt.transformChoice || (option => option);
   }
@@ -61,6 +64,11 @@ class AutocompletePrompt extends Base {
       .pipe(takeWhile(dontHaveAnswer))
       .forEach(this.onKeypress.bind(this));
 
+    if (this.opt.showAutoTrail) {
+      this.cursorPos = 0;
+      cliCursor.hide();
+    }
+
     // Call once at init
     this.search(undefined);
 
@@ -76,6 +84,44 @@ class AutocompletePrompt extends Base {
     var content = this.getQuestion();
     var bottomContent = '';
 
+    const renderLine = (selectedChoice /*: ?string */) => {
+      if (this.opt.showAutoTrail) {
+        const cursorPos = this.cursorPos;
+        const line = this.rl.line;
+        let autoTrail = '';
+        if (this.opt.showAutoTrail && selectedChoice) {
+          const transformedChoice = this.transformChoice(selectedChoice);
+          for (let i = 0; i < line.length; ++i) {
+            const prefix = line.substr(i);
+            if (transformedChoice.startsWith(prefix)) {
+              autoTrail = transformedChoice.substr(prefix.length);
+              break;
+            }
+          }
+        }
+        for (let i = 0; i <= (line.length + autoTrail.length + 1); ++i) {
+          let char = ' ';
+          if (i < line.length) {
+            char = line.charAt(i);
+          } else if (autoTrail) {
+            const autoTrailI = i - line.length;
+            if (autoTrailI < autoTrail.length) {
+              char = autoTrail.charAt(autoTrailI);
+              if (i !== cursorPos) {
+                char = chalk.dim(char);
+              }
+            }
+          }
+          if (i === cursorPos) {
+            char = chalk.inverse(char);
+          }
+          content += char;
+        }
+      } else {
+        content += this.rl.line;
+      }
+    };
+
     if (this.firstRender) {
       const suggestText = 'suggestText' in this.opt ? this.opt.suggestText :
         `(Use arrow keys or type to search${this.opt.suggestOnly ? ', tab to autocomplete' : ''})`;
@@ -87,11 +133,14 @@ class AutocompletePrompt extends Base {
     if (this.status === 'answered') {
       content += chalk.cyan(this.shortAnswer || this.answerName || this.answer);
     } else if (this.searching) {
-      content += this.rl.line;
+      renderLine();
       bottomContent += '  ' + chalk.dim('Searching...');
     } else if (this.currentChoices.length) {
-      var choicesStr = listRender(this.currentChoices, this.selected, this.opt.styleSelected);
-      content += this.rl.line;
+      const {
+        choicesStr,
+        selectedChoice,
+      } = listRender(this.currentChoices, this.selected, this.opt.styleSelected);
+      renderLine(selectedChoice);
       var indexPosition = this.selected;
       var realIndexPosition = 0;
       this.currentChoices.choices.every((choice, index) => {
@@ -107,7 +156,7 @@ class AutocompletePrompt extends Base {
         this.opt.pageSize
       );
     } else {
-      content += this.rl.line;
+      renderLine();
       const noResultsText = 'noResultsText' in this.opt ? this.opt.noResultsText : 'No results...';
       if (noResultsText) {
         bottomContent += '  ' + chalk.yellow(noResultsText);
@@ -186,6 +235,9 @@ class AutocompletePrompt extends Base {
       // Rerender prompt
       this.render();
       this.screen.done();
+      if (this.opt.showAutoTrail) {
+        cliCursor.show();
+      }
       this.done(choice.value);
     })(choice.value);
   }
@@ -244,6 +296,9 @@ class AutocompletePrompt extends Base {
         var autoCompleted = this.transformChoice(
             this.currentChoices.getChoice(this.selected).value);
         this.rl.write(autoCompleted);
+        if (this.opt.showAutoTrail) {
+          this.cursorPos = autoCompleted.length;
+        }
         this.render();
         if (this.opt.searchOnAutocomplete) {
           this.search(autoCompleted);
@@ -261,9 +316,25 @@ class AutocompletePrompt extends Base {
       this.ensureSelectedInRange();
       this.render();
     } else {
+      const changed = this.lastSearchTerm !== this.rl.line;
+      if (this.opt.showAutoTrail) {
+        if (keyName === 'left' || keyName === 'backspace') {
+          if (this.cursorPos > 0) {
+            --this.cursorPos;
+          }
+        } else if (keyName === 'right') {
+          if (this.cursorPos < this.rl.line.length) {
+            ++this.cursorPos;
+          }
+        } else if (keyName === 'delete') {
+          // do nothing
+        } else {
+          ++this.cursorPos;
+        }
+      }
       this.render(); // Render input automatically
       // Only search if input have actually changed, not because of other keypresses
-      if (this.lastSearchTerm !== this.rl.line) {
+      if (changed) {
         this.search(this.rl.line); // Trigger new search
       }
     }
@@ -278,6 +349,7 @@ class AutocompletePrompt extends Base {
 function listRender(choices, pointer /*: string */, styleSelected /*: (text: string) => string */) /*: string */ {
   var output = '';
   var separatorOffset = 0;
+  let selectedChoice = undefined;
 
   choices.forEach(function(choice, i) {
     if (choice.type === 'separator') {
@@ -295,11 +367,15 @@ function listRender(choices, pointer /*: string */, styleSelected /*: (text: str
       } else {
         line = chalk.cyan(line);
       }
+      selectedChoice = choice.name;
     }
     output += line + ' \n';
   });
 
-  return output.replace(/\n$/, '');
+  return {
+    choicesStr: output.replace(/\n$/, ''),
+    selectedChoice,
+  };
 }
 
 function isPromise(value) {

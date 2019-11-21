@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "chalk": "^2.0.0",
+    "cli-cursor": "^3.1.0",
     "figures": "^2.0.0",
     "run-async": "^2.3.0"
   },
